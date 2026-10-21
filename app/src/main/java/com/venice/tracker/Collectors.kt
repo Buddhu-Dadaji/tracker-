@@ -42,8 +42,9 @@ object Location2 {
     @SuppressLint("MissingPermission")
     fun once(ctx: Context): String {
         val m = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val last = try { m.getLastKnownLocation(LocationManager.GPS_PROVIDER) }
-                   ?: try { m.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Throwable) { null }
+        val gps = try { m.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Throwable) { null }
+        val net = try { m.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Throwable) { null }
+        val last = gps ?: net
         if (last == null) return "no fix yet"
         push(last)
         return "${last.latitude},${last.longitude}  +/-${last.accuracy.toInt()}m"
