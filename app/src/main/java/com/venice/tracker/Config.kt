@@ -3,8 +3,8 @@ package com.venice.tracker
 object Config {
 
     // ---------- FILL IN AT STAGE 2 ----------
-    const val FIREBASE_URL = "https://REPLACE-ME-default-rtdb.firebaseio.com"
-    const val API_SECRET   = "REPLACE-WITH-YOUR-OWN-LONG-WORD"
+    const val FIREBASE_URL = "https://tracker-9c0ec-default-rtdb.asia-southeast1.firebasedatabase.app"
+    const val API_SECRET   = "white-elephant-9348"
 
     // ---------- FILL IN AT STAGE 3 ----------
     const val TG_TOKEN   = "REPLACE_WITH_BOT_TOKEN"
