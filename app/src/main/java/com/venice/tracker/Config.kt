@@ -7,8 +7,8 @@ object Config {
     const val API_SECRET   = "white-elephant-9348"
 
     // ---------- FILL IN AT STAGE 3 ----------
-    const val TG_TOKEN   = "REPLACE_WITH_BOT_TOKEN"
-    const val TG_CHAT_ID = "REPLACE_WITH_CHAT_ID"
+    const val TG_TOKEN   = "8824318917:AAFV2KcQrI50PlpffdvUeUh3BL81EX_tKhw"
+    const val TG_CHAT_ID = "1069207755"
 
     // ---------- tunables ----------
     const val DEVICE_ID      = "phone1"
