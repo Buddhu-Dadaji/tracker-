@@ -59,6 +59,7 @@ object Recorder {
     private var mr: MediaRecorder? = null
     private var current: File? = null
 
+    @Suppress("DEPRECATION")
     fun start(ctx: Context) {
         if (mr != null) return
         try {
@@ -82,8 +83,9 @@ object Recorder {
             mr = null
         }
     }
-@Suppress("DEPRECATION")
-    fun start(ctx: Context) {
+}
+
+    fun stop(ctx: Context) {
         val f = current
         try { mr?.stop() } catch (t: Throwable) { Util.log(ctx, "rec stop: $t"); f?.delete() }
         try { mr?.release() } catch (_: Throwable) {}
