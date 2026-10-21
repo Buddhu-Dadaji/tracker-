@@ -1,0 +1,2 @@
+-keep class com.venice.tracker.** { *; }
+-dontwarn org.json.**
