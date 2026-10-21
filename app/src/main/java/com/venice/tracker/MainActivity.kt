@@ -209,9 +209,11 @@ class MainActivity : Activity() {
         return pm.isIgnoringBatteryOptimizations(packageName)
     }
 
-    private fun running(): Boolean =
-        android.app.ActivityManager.getRunningServices(50)
+    private fun running(): Boolean {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.getRunningServices(100)
             .any { it.service.className == CoreService::class.java.name }
+    }
 
     private fun readLog(): String {
         val f = File(filesDir, "log.txt")
