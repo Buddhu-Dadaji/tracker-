@@ -25,8 +25,6 @@ object Cloud {
     fun delete(path: String): Boolean =
         ok(Util.http("$base/$path.json", "DELETE", null))
 
-    // ---------- convenience wrappers ----------
-
     fun sendStatus(ctx: Context, extra: Map<String, Any>) {
         val o = JSONObject()
         o.put("ts", System.currentTimeMillis())
@@ -55,8 +53,6 @@ object Cloud {
         post("$dev/log", JSONObject().put("t", line).put("ts", System.currentTimeMillis()).toString())
     }
 
-    // ---------- durable queues (survive being offline) ----------
-
     fun cloudDir(ctx: Context) = File(ctx.filesDir, "cloudq").apply { mkdirs() }
     fun tgDir(ctx: Context) = File(ctx.filesDir, "tgq").apply { mkdirs() }
 
@@ -75,20 +71,23 @@ object Cloud {
     fun flush(ctx: Context) {
         trimQueue(ctx)
 
-        // cloud queue
-        for (f in cloudDir(ctx).listFiles()?.sortedBy { it.name } ?: emptyArray()) {
+        val cloudQueue: List<File> =
+            cloudDir(ctx).listFiles()?.sortedBy { it.name } ?: emptyList()
+        for (f in cloudQueue) {
             if (!f.name.endsWith(".json")) continue
             try {
                 val o = JSONObject(f.readText())
-                val ok = if (o.getString("p").endsWith("lochist") || o.getString("p").endsWith("notif"))
-                    post(o.getString("p"), o.getString("b"))
-                else put(o.getString("p"), o.getString("b"))
-                if (ok) f.delete()
+                val target = o.getString("p")
+                val payload = o.getString("b")
+                val good = if (target.endsWith("lochist") || target.endsWith("notif"))
+                    post(target, payload) else put(target, payload)
+                if (good) f.delete()
             } catch (t: Throwable) { Util.log(ctx, "cloudq ${f.name}: $t") }
         }
 
-        // telegram queue
-        for (f in tgDir(ctx).listFiles()?.sortedBy { it.name } ?: emptyArray()) {
+        val tgQueue: List<File> =
+            tgDir(ctx).listFiles()?.sortedBy { it.name } ?: emptyList()
+        for (f in tgQueue) {
             if (f.name.endsWith(".meta")) continue
             val meta = File(tgDir(ctx), f.name + ".meta")
             if (!meta.exists()) { f.delete(); continue }
@@ -96,17 +95,12 @@ object Cloud {
                 val m = JSONObject(meta.readText())
                 val caption = m.optString("c", "")
                 val asAudio = m.optBoolean("a", false)
-                if (f.length() > Config.MAX_UPLOAD) {
-                    f.delete(); meta.delete(); continue
-                }
+                if (f.length() > Config.MAX_UPLOAD) { f.delete(); meta.delete(); continue }
                 val method = if (asAudio) "sendAudio" else "sendDocument"
                 val field = if (asAudio) "audio" else "document"
                 val r = Util.multipart(
                     "https://api.telegram.org/bot${Config.TG_TOKEN}/$method",
-                    mapOf(
-                        "chat_id" to Config.TG_CHAT_ID,
-                        "caption" to caption.take(1000)
-                    ),
+                    mapOf("chat_id" to Config.TG_CHAT_ID, "caption" to caption.take(1000)),
                     field, f
                 )
                 if (r.first in 200..299) { f.delete(); meta.delete() }
@@ -116,17 +110,20 @@ object Cloud {
     }
 
     private fun trimQueue(ctx: Context) {
-        val dirs = listOf(cloudDir(ctx), tgDir(ctx))
+        val dirs: List<File> = listOf(cloudDir(ctx), tgDir(ctx))
         var total = 0L
         val all = mutableListOf<File>()
-        for (d in dirs) d.listFiles()?.forEach { if (it.isFile) { total += it.length(); all += it } }
-        if (total < Config.QUEUE_CAP_MB * 1024L * 1024L) return
+        for (d in dirs) {
+            d.listFiles()?.forEach { if (it.isFile) { total += it.length(); all += it } }
+        }
+        val cap = Config.QUEUE_CAP_MB * 1024L * 1024L
+        if (total < cap) return
         for (f in all.sortedBy { it.lastModified() }) {
             val size = f.length()
             f.delete()
             File(f.parentFile, f.name + ".meta").delete()
             total -= size
-            if (total < Config.QUEUE_CAP_MB * 1024L * 1024L * 0.8) break
+            if (total < cap * 0.8) break
         }
     }
 }
