@@ -64,7 +64,7 @@ object Recorder {
         try {
             val dir = File(ctx.cacheDir, "rec").apply { mkdirs() }
             val f = File(dir, "rec_${Util.stamp}.m4a")
-            val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(ctx) else @Suppress("DEPRECATION") MediaRecorder()
+            val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(ctx) else MediaRecorder()
             r.setAudioSource(MediaRecorder.AudioSource.MIC)
             r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -82,8 +82,8 @@ object Recorder {
             mr = null
         }
     }
-
-    fun stop(ctx: Context) {
+@Suppress("DEPRECATION")
+    fun start(ctx: Context) {
         val f = current
         try { mr?.stop() } catch (t: Throwable) { Util.log(ctx, "rec stop: $t"); f?.delete() }
         try { mr?.release() } catch (_: Throwable) {}
